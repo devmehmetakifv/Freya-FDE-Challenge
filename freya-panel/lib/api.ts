@@ -13,8 +13,18 @@ function readError(data: unknown): string | null {
   if (typeof data !== "object" || data === null) return null;
   const body = data as { error?: unknown; detail?: unknown };
   if (typeof body.error === "string") return body.error;
+  if (Array.isArray(body.detail)) return body.detail.map(validationMessage).join("; ");
   if (body.detail !== undefined) return typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
   return null;
+}
+
+// FastAPI 422 items look like {loc: ["body", "title"], msg: "..."}; show "title: msg".
+function validationMessage(item: unknown): string {
+  if (typeof item !== "object" || item === null) return String(item);
+  const { loc, msg } = item as { loc?: unknown; msg?: unknown };
+  if (typeof msg !== "string") return JSON.stringify(item);
+  const field = Array.isArray(loc) ? loc.filter((part) => part !== "body").join(".") : "";
+  return field ? `${field}: ${msg}` : msg;
 }
 
 // Render any thrown value as a short message for the UI.

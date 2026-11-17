@@ -37,6 +37,9 @@ export async function proxyJson(backend: Backend, path: string, init?: RequestIn
     return errorResponse(`${label} unreachable at ${baseUrl}`, 502);
   }
 
+  // 204 No Content (e.g. a DELETE) has no body to parse; pass it through as-is.
+  if (upstream.status === 204) return new Response(null, { status: 204 });
+
   // Keep the backend's status; surface its error text if the body is not JSON.
   const text = await upstream.text();
   try {

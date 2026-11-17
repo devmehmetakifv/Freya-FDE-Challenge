@@ -4,14 +4,22 @@ import { useCallback, useEffect, useState } from "react";
 import { errorText, fetchJson } from "@/lib/api";
 import type { RunSummary, Scenario, StartRunRequest } from "@/lib/types";
 import RunResults from "./RunResults";
+import ScenarioForm from "./ScenarioForm";
 import { Button, ErrorNote } from "./ui";
 
 const RUNS_PER_SCENARIO_OPTIONS = [1, 2, 3];
 
+// Which scenario the form is open for: "new", an existing one, or closed (null).
+type Editing = Scenario | "new" | null;
+
 // Pick scenarios, start a simulated-customer run, and browse past runs.
 export default function SimulationTab() {
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Track what the user unticked, so new scenarios start selected and deleted ones simply vanish.
+  const [deselected, setDeselected] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState<Editing>(null);
+  const [scenariosKey, setScenariosKey] = useState(0);
+  const reloadScenarios = useCallback(() => setScenariosKey((k) => k + 1), []);
   const [runsPerScenario, setRunsPerScenario] = useState(1);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -19,15 +27,14 @@ export default function SimulationTab() {
   const [runsKey, setRunsKey] = useState(0);
   const refreshRuns = useCallback(() => setRunsKey((k) => k + 1), []);
 
-  // On mount: load scenarios, all selected by default.
+  const selectedIds = scenarios.map((s) => s.id).filter((id) => !deselected.has(id));
+
+  // Scenario list: loaded on mount and again after a create, edit or delete.
   useEffect(() => {
     fetchJson<Scenario[]>("/api/sim/scenarios")
-      .then((list) => {
-        setScenarios(list);
-        setSelected(new Set(list.map((s) => s.id)));
-      })
+      .then(setScenarios)
       .catch((err) => setError(errorText(err)));
-  }, []);
+  }, [scenariosKey]);
 
   // Run history: reloaded on mount, on Refresh, after starting a run and when a run finishes.
   useEffect(() => {
@@ -37,7 +44,7 @@ export default function SimulationTab() {
   }, [runsKey]);
 
   function toggle(id: string) {
-    setSelected((prev) => {
+    setDeselected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -49,7 +56,7 @@ export default function SimulationTab() {
   async function startRun() {
     setError(null);
     const body: StartRunRequest = {
-      scenario_ids: selected.size === scenarios.length ? null : [...selected],
+      scenario_ids: selectedIds.length === scenarios.length ? null : selectedIds,
       runs_per_scenario: runsPerScenario,
     };
     try {
@@ -65,21 +72,56 @@ export default function SimulationTab() {
     }
   }
 
+  // Delete after a confirm; the reload drops it from the list and the run checklist.
+  async function deleteScenario(s: Scenario) {
+    if (!confirm(`Delete scenario "${s.title}" (${s.id})?`)) return;
+    setError(null);
+    try {
+      await fetchJson<null>(`/api/sim/scenarios/${encodeURIComponent(s.id)}`, { method: "DELETE" });
+      reloadScenarios();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }
+
+  // Form saved: close it and pick up the new or changed scenario.
+  function onScenarioSaved() {
+    setEditing(null);
+    reloadScenarios();
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {error && <ErrorNote message={error} />}
 
       <section className="flex flex-col gap-2">
-        <h2 className="font-semibold">Scenarios</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="font-semibold">Scenarios</h2>
+          {editing === null && <Button onClick={() => setEditing("new")}>New scenario</Button>}
+        </div>
+        {editing !== null && (
+          <ScenarioForm
+            key={editing === "new" ? "new" : editing.id}
+            initial={editing === "new" ? null : editing}
+            onSaved={onScenarioSaved}
+            onCancel={() => setEditing(null)}
+          />
+        )}
         {scenarios.map((s) => (
-          <label key={s.id} className="flex items-start gap-2 text-sm">
-            <input type="checkbox" className="mt-1" checked={selected.has(s.id)} onChange={() => toggle(s.id)} />
-            <span>
-              <strong>{s.title}</strong> <span className="text-zinc-500">(customer #{s.customer_id})</span>
-              <br />
-              <span className="text-zinc-600">{s.description}</span>
-            </span>
-          </label>
+          <div key={s.id} className="flex items-start justify-between gap-2">
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" checked={!deselected.has(s.id)} onChange={() => toggle(s.id)} />
+              <span>
+                <strong>{s.title}</strong> <span className="text-zinc-500">(customer #{s.customer_id})</span>
+                <br />
+                <span className="text-zinc-600">{s.description}</span>
+              </span>
+            </label>
+            <div className="flex shrink-0 gap-2">
+              <Button onClick={() => setEditing(s)}>Edit</Button>
+              <Button onClick={() => void deleteScenario(s)}>Delete</Button>
+            </div>
+          </div>
         ))}
         <div className="mt-2 flex items-center gap-3">
           <label className="text-sm">
@@ -96,7 +138,7 @@ export default function SimulationTab() {
               ))}
             </select>
           </label>
-          <Button primary onClick={() => void startRun()} disabled={selected.size === 0}>
+          <Button primary onClick={() => void startRun()} disabled={selectedIds.length === 0}>
             Run
           </Button>
         </div>

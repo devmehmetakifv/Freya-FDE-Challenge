@@ -46,11 +46,26 @@ export interface Call {
 }
 
 // Simulation server (FastAPI, SIM_SERVICE_URL)
+// A seat booked before the simulated call starts: (customer_id, slot_id).
+export type SetupBooking = [number, number];
+
 export interface Scenario {
-  id: string;
+  id: string; // ^[a-z0-9_]{3,40}$, immutable after create
   title: string;
   description: string;
   customer_id: number;
+  situation: string; // instructions for the simulated customer
+  expected_outcomes: string[];
+  allowed_slots: number[]; // non-empty iff "booked" is an expected outcome
+  setup_bookings: SetupBooking[];
+  is_cardholder: boolean;
+}
+
+// GET /meta on the simulation server: option lists for the scenario form.
+export interface SimMeta {
+  outcomes: string[];
+  customers: Pick<Customer, "id" | "full_name" | "district">[];
+  slots: Omit<Slot, "remaining" | "capacity">[];
 }
 
 export type RunStatus = "running" | "done" | "failed";
