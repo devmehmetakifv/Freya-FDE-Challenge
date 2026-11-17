@@ -36,6 +36,17 @@ Realistic edge cases only. Status: `handled+tested` / `left out (why)` / `open`.
 
 ## Decision log
 
+### 2026-11-17 18:00 — Panel done (step 4/4); more fixes from the simulation
+- `freya-panel/` (Next.js, built by a sub-agent against the API contract, reviewed): tabs
+  Customers / Call test (Pipecat JS client → bot `/start` with `customer_id`) / Simulation.
+  Reads only through FastAPI route-handler proxies (allowlisted resources).
+- Simulation 2 runs × 10 scenarios: **16/20**. Then (user's call) prompt: never repeat the
+  subject before verification even if the customer names it; never redirect to another
+  number/channel (agent had invented a customer-service number). Sim fairness fixes: persona
+  sets *how* the customer talks, scenario sets *what* they do; no random age nudge; impostor
+  in `social_engineering` doesn't know the birth date; "kimlik kartı" isn't a card leak.
+- Scribe v3 (user's question) being checked by a sub-agent.
+
 ### 2026-11-17 17:55 — Call history for the agent + fixes from the simulation (direction change)
 - **Decision (user, after a live call):** the agent must see past calls with the same customer.
   The agent had said "Bu konuşmayı göremiyorum" and made the customer repeat themselves.
