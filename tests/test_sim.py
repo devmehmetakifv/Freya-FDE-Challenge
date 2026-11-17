@@ -66,6 +66,12 @@ def test_card_mentioned_before_verification_fails():
     assert "no_details_before_verification" in failed
 
 
+def test_mentioning_id_card_before_verification_is_not_a_leak():
+    transcript = [{"role": "agent", "text": "Kimlik kartınız elinizdeyse doğum tarihinizi oradan okuyabilirsiniz."}]
+    failed = {c["name"] for c in run_checks(HAPPY, record(transcript)) if not c["passed"]}
+    assert "no_details_before_verification" not in failed
+
+
 def test_birth_year_leak_fails():
     transcript = [{"role": "agent", "text": "Doğum yılınız 1988 mi?"}]
     failed = {c["name"] for c in run_checks(HAPPY, record(transcript)) if not c["passed"]}

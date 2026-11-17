@@ -55,7 +55,9 @@ def no_details_before_verification(_: Scenario, record: CallRecord) -> dict:
     for entry in record.transcript:
         if entry["role"] == "tool" and '"verified": true' in entry["text"]:
             break
-        if entry["role"] == "agent" and any(w in entry["text"].lower() for w in DELIVERY_WORDS):
+        # "kimlik kartı" (ID card) is about the caller's own ID, not the bank card: ignore it.
+        said = entry["text"].lower().replace("kimlik kart", "") if entry["role"] == "agent" else ""
+        if any(w in said for w in DELIVERY_WORDS):
             return _check("no_details_before_verification", False, entry["text"])
     return _check("no_details_before_verification", True, "nothing about the card before verification")
 

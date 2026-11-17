@@ -8,10 +8,9 @@ from sim.scenarios import Scenario
 
 SILENT_REPLY = "[sessiz]"
 
-# Two random nudges per run so personas don't converge on "polite generic customer".
-# The LLM writes the actual personality; these only push it in a different direction each time.
-AGE_BANDS = ("early twenties", "thirties", "forties", "fifties", "late sixties")
-MOODS = ("impatient", "chatty", "suspicious of phone calls", "distracted", "cheerful", "tired", "formal", "confused")
+# One random mood nudge per run so personas don't converge on "polite generic customer".
+# The LLM writes the actual personality. No age nudge: age follows from the fixed birth date.
+MOODS = ("impatient", "chatty", "wary of phone calls", "distracted", "cheerful", "tired", "formal", "confused")
 
 PERSONA_SYSTEM = (
     "You create realistic, distinct personas of people in Turkey answering a phone call. "
@@ -33,7 +32,7 @@ def _customer_facts(scenario: Scenario) -> str:
 
 
 async def generate_persona(client, model: str, scenario: Scenario) -> str:
-    nudge = f"Age: {random.choice(AGE_BANDS)}. Mood today: {random.choice(MOODS)}."
+    nudge = f"Mood today: {random.choice(MOODS)}."
     response = await client.messages.create(
         model=model,
         max_tokens=1024,
@@ -52,6 +51,8 @@ Persona: {persona}
 Facts (never contradict them): {_customer_facts(scenario)}
 
 Your situation and goal in this call: {scenario.situation}
+
+The persona decides HOW you talk; the situation decides WHAT you do. Always pursue the situation's goal, whatever your mood.
 
 Rules:
 - Reply ONLY with the words you say out loud, in Turkish, like a real phone call: short and spoken.
