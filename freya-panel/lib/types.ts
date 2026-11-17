@@ -11,6 +11,15 @@ export interface Customer {
   start_time: string | null;
   end_time: string | null;
   last_outcome: string | null;
+  // Every outcome logged on the customer's latest call, oldest first.
+  last_outcomes: string[];
+}
+
+// One entry of a call's outcome log; a call can have several (e.g. needs_human + no_suitable_slot).
+export interface CallOutcome {
+  outcome: string;
+  note: string | null;
+  created_at: string;
 }
 
 export interface Slot {
@@ -32,6 +41,7 @@ export interface Call {
   outcome: string | null;
   note: string | null;
   started_at: string;
+  outcomes: CallOutcome[];
 }
 
 // Simulation server (FastAPI, SIM_SERVICE_URL)

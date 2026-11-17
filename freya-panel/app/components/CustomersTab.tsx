@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { errorText, fetchJson } from "@/lib/api";
 import { addressLabel, slotLabel } from "@/lib/format";
-import type { Call, Customer, Slot } from "@/lib/types";
+import type { Call, CallOutcome, Customer, Slot } from "@/lib/types";
 import { Button, ErrorNote, OutcomeBadge, Table, Td } from "./ui";
 
 interface SlotData {
@@ -60,7 +60,7 @@ function CustomersTable({ customers }: { customers: Customer[] }) {
   return (
     <section className="flex flex-col gap-2">
       <h2 className="font-semibold">Customers</h2>
-      <Table headers={["Name", "Phone", "District", "Address", "Booked slot", "Last outcome"]}>
+      <Table headers={["Name", "Phone", "District", "Address", "Booked slot", "Last call outcomes"]}>
         {customers.map((c) => (
           <tr key={c.id}>
             <Td>{c.full_name}</Td>
@@ -69,7 +69,16 @@ function CustomersTable({ customers }: { customers: Customer[] }) {
             <Td>{addressLabel(c.address_type)}</Td>
             <Td>{slotLabel(c.day, c.start_time, c.end_time)}</Td>
             <Td>
-              <OutcomeBadge outcome={c.last_outcome} />
+              {/* Show every outcome of the latest call so a needs_human is never hidden. */}
+              {c.last_outcomes.length === 0 ? (
+                <OutcomeBadge outcome={null} />
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {c.last_outcomes.map((o, i) => (
+                    <OutcomeBadge key={i} outcome={o} />
+                  ))}
+                </div>
+              )}
             </Td>
           </tr>
         ))}
@@ -102,13 +111,28 @@ function SlotsTable({ slots }: { slots: Slot[] }) {
   );
 }
 
+// A call's outcome log: one badge + note per recorded outcome, in the order they happened.
+function OutcomeLog({ outcomes }: { outcomes: CallOutcome[] }) {
+  if (outcomes.length === 0) return <OutcomeBadge outcome={null} />;
+  return (
+    <ul className="flex flex-col gap-1">
+      {outcomes.map((o, i) => (
+        <li key={i} className="flex flex-col gap-0.5">
+          <OutcomeBadge outcome={o.outcome} />
+          {o.note && <span className="text-xs text-zinc-600">{o.note}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function CallsTable({ calls }: { calls: Call[] }) {
   return (
     <section className="flex flex-col gap-2">
       <h2 className="font-semibold">Recent calls</h2>
       {calls.length === 0 && <p className="text-sm text-zinc-500">No calls yet.</p>}
       {calls.length > 0 && (
-        <Table headers={["ID", "Name", "Verified", "Failed attempts", "Outcome", "Note", "Time"]}>
+        <Table headers={["ID", "Name", "Verified", "Failed attempts", "Outcomes (oldest first)", "Time"]}>
           {calls.map((k) => (
             <tr key={k.call_id}>
               <Td>{k.call_id}</Td>
@@ -116,9 +140,8 @@ function CallsTable({ calls }: { calls: Call[] }) {
               <Td>{k.verified ? "Yes" : "No"}</Td>
               <Td>{k.failed_attempts}</Td>
               <Td>
-                <OutcomeBadge outcome={k.outcome} />
+                <OutcomeLog outcomes={k.outcomes} />
               </Td>
-              <Td>{k.note ?? "—"}</Td>
               <Td>{k.started_at}</Td>
             </tr>
           ))}

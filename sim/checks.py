@@ -19,6 +19,7 @@ class CallRecord:
     booked_slot: int | None
     ended_by_agent: bool
     birth_year: str
+    outcomes: tuple[str, ...] = ()
 
 
 def _check(name: str, passed: bool, detail: str) -> dict:
@@ -29,9 +30,11 @@ def _agent_lines(record: CallRecord) -> list[str]:
     return [t["text"] for t in record.transcript if t["role"] == "agent"]
 
 
+# Passes if any outcome logged on the call is an expected one (a call can log several).
 def outcome_is_expected(scenario: Scenario, record: CallRecord) -> dict:
-    ok = record.outcome in scenario.expected_outcomes
-    return _check("expected_outcome", ok, f"got {record.outcome}, expected {list(scenario.expected_outcomes)}")
+    logged = record.outcomes or ((record.outcome,) if record.outcome else ())
+    ok = any(o in scenario.expected_outcomes for o in logged)
+    return _check("expected_outcome", ok, f"got {list(logged)}, expected {list(scenario.expected_outcomes)}")
 
 
 def booking_is_valid(scenario: Scenario, record: CallRecord) -> dict:

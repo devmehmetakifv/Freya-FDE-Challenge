@@ -1,6 +1,7 @@
 """Bank domain rules for the card re-delivery calls. Pure functions over a SQLite connection."""
 
 import sqlite3
+from collections import defaultdict
 from datetime import UTC, date, datetime
 
 from service.db import transaction
@@ -80,6 +81,23 @@ def _customer_district(conn: sqlite3.Connection, customer_id: int) -> str:
     return row["district"]
 
 
+# Every outcome is appended to the call's log (a call can have several, e.g. needs_human and
+# no_suitable_slot); calls.outcome / calls.note mirror the latest one.
+def _log_outcome(conn: sqlite3.Connection, call_id: int, outcome: str, note: str) -> None:
+    conn.execute(
+        "INSERT INTO call_outcomes (call_id, outcome, note, created_at) VALUES (?, ?, ?, ?)",
+        (call_id, outcome, note, _now()),
+    )
+    conn.execute("UPDATE calls SET outcome = ?, note = ? WHERE id = ?", (outcome, note, call_id))
+
+
+def _outcomes_by_call(conn: sqlite3.Connection) -> dict[int, list[dict]]:
+    by_call: dict[int, list[dict]] = defaultdict(list)
+    for row in conn.execute("SELECT call_id, outcome, note, created_at FROM call_outcomes ORDER BY id"):
+        by_call[row["call_id"]].append({"outcome": row["outcome"], "note": row["note"], "created_at": row["created_at"]})
+    return by_call
+
+
 def _slot_view(row: sqlite3.Row) -> dict:
     return {
         "slot_id": row["id"],
@@ -137,9 +155,7 @@ def verify_identity(conn: sqlite3.Connection, call_id: int, birth_date: date) ->
         failed = call["failed_attempts"] + 1
         conn.execute("UPDATE calls SET failed_attempts = ? WHERE id = ?", (failed, call_id))
         if failed >= MAX_VERIFY_ATTEMPTS:
-            conn.execute(
-                "UPDATE calls SET outcome = 'verification_failed' WHERE id = ?", (call_id,)
-            )
+            _log_outcome(conn, call_id, "verification_failed", "3 hatalı doğum tarihi denemesi")
         return {"verified": False, "attempts_left": MAX_VERIFY_ATTEMPTS - failed}
 
 
@@ -192,7 +208,7 @@ def book_slot(conn: sqlite3.Connection, call_id: int, slot_id: int) -> dict:
                     (slot_id, call_id, _now(), customer_id),
                 )
 
-        conn.execute("UPDATE calls SET outcome = 'booked' WHERE id = ?", (call_id,))
+        _log_outcome(conn, call_id, "booked", f"{slot['day']} {slot['start_time']}-{slot['end_time']}")
         booked_slot = conn.execute("SELECT * FROM slots WHERE id = ?", (slot_id,)).fetchone()
         return {"booked": True, "slot": _slot_view(booked_slot)}
 
@@ -205,9 +221,7 @@ def record_outcome(conn: sqlite3.Connection, call_id: int, outcome: str, note: s
             raise AlreadyBooked("call already ended with a booking")
         if call["failed_attempts"] >= MAX_VERIFY_ATTEMPTS:
             raise VerificationLocked("call is locked after failed verification; outcome is final")
-        conn.execute(
-            "UPDATE calls SET outcome = ?, note = ? WHERE id = ?", (outcome, note, call_id)
-        )
+        _log_outcome(conn, call_id, outcome, note)
         return {"call_id": call_id, "outcome": outcome}
 
 
@@ -220,14 +234,21 @@ def list_customers(conn: sqlite3.Connection) -> list[dict]:
         SELECT c.id, c.full_name, c.phone, c.district, c.address_type,
                s.day, s.start_time, s.end_time,
                (SELECT outcome FROM calls WHERE customer_id = c.id
-                ORDER BY id DESC LIMIT 1) AS last_outcome
+                ORDER BY id DESC LIMIT 1) AS last_outcome,
+               (SELECT id FROM calls WHERE customer_id = c.id
+                ORDER BY id DESC LIMIT 1) AS last_call_id
         FROM customers c
         LEFT JOIN bookings b ON b.customer_id = c.id
         LEFT JOIN slots s ON s.id = b.slot_id
         ORDER BY c.id
         """
     ).fetchall()
-    return [dict(row) for row in rows]
+    # All outcomes of the customer's latest call, so a needs_human isn't hidden by a later one.
+    by_call = _outcomes_by_call(conn)
+    return [
+        {**dict(row), "last_outcomes": [o["outcome"] for o in by_call.get(row["last_call_id"], [])]}
+        for row in rows
+    ]
 
 
 def list_slots(conn: sqlite3.Connection) -> list[dict]:
@@ -244,4 +265,5 @@ def list_calls(conn: sqlite3.Connection) -> list[dict]:
         ORDER BY k.id DESC
         """
     ).fetchall()
-    return [dict(row) for row in rows]
+    by_call = _outcomes_by_call(conn)
+    return [{**dict(row), "outcomes": by_call.get(row["call_id"], [])} for row in rows]

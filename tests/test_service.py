@@ -194,6 +194,34 @@ def test_locked_call_outcome_is_final(client):
     assert client.get("/calls").json()[0]["outcome"] == "verification_failed"
 
 
+# --- Outcome log: every outcome of a call is kept, none hidden by a later one ---
+
+
+def test_all_outcomes_of_a_call_are_logged_in_order(client):
+    call_id = verified_call(client, MEHMET, DOBS[MEHMET])
+    client.post(f"/calls/{call_id}/outcome", json={"outcome": "needs_human", "note": "eve teslim istiyor"})
+    client.post(f"/calls/{call_id}/outcome", json={"outcome": "no_suitable_slot", "note": "Cuma uymuyor"})
+    call = client.get("/calls").json()[0]
+    assert [(o["outcome"], o["note"]) for o in call["outcomes"]] == [
+        ("needs_human", "eve teslim istiyor"),
+        ("no_suitable_slot", "Cuma uymuyor"),
+    ]
+    assert call["outcome"] == "no_suitable_slot"  # latest, kept for compatibility
+    mehmet = client.get("/customers").json()[1]
+    assert mehmet["last_outcomes"] == ["needs_human", "no_suitable_slot"]
+
+
+def test_booking_and_lock_are_logged_too(client):
+    booked = verified_call(client, AYSE, AYSE_DOB)
+    client.post(f"/calls/{booked}/book", json={"slot_id": KADIKOY_THU})
+    locked = client.post("/calls", json={"customer_id": MEHMET}).json()["call_id"]
+    for _ in range(3):
+        client.post(f"/calls/{locked}/verify", json={"birth_date": "1990-01-01"})
+    outcomes = {c["call_id"]: [(o["outcome"], o["note"]) for o in c["outcomes"]] for c in client.get("/calls").json()}
+    assert outcomes[booked] == [("booked", "Perşembe 09:00-13:00")]
+    assert outcomes[locked] == [("verification_failed", "3 hatalı doğum tarihi denemesi")]
+
+
 # --- Call history: the next call sees what earlier calls recorded ---
 
 

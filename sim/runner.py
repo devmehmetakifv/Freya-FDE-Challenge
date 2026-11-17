@@ -73,12 +73,14 @@ async def _apply_setup(http: httpx.AsyncClient, scenario: Scenario) -> None:
         await setup.execute("book_slot", {"slot_id": slot_id})
 
 
-def _final_state(db_path: Path, call_id: int, customer_id: int) -> tuple[str | None, int | None]:
+def _final_state(db_path: Path, call_id: int, customer_id: int) -> tuple[str | None, tuple[str, ...], int | None]:
     conn = connect(db_path)
     try:
         outcome = conn.execute("SELECT outcome FROM calls WHERE id = ?", (call_id,)).fetchone()["outcome"]
+        logged = tuple(r["outcome"] for r in conn.execute(
+            "SELECT outcome FROM call_outcomes WHERE call_id = ? ORDER BY id", (call_id,)))
         booking = conn.execute("SELECT slot_id FROM bookings WHERE customer_id = ?", (customer_id,)).fetchone()
-        return outcome, booking["slot_id"] if booking else None
+        return outcome, logged, booking["slot_id"] if booking else None
     finally:
         conn.close()
 
@@ -111,7 +113,7 @@ async def run_scenario(client, scenario: Scenario, attempt: int, config: SimConf
             transcript.append({"role": "customer", "text": "(sessiz)" if silent else reply})
             agent_messages.append({"role": "user", "content": SILENCE_MESSAGE if silent else reply})
 
-    outcome, booked_slot = _final_state(db_path, session.call_id, scenario.customer_id)
+    outcome, outcomes, booked_slot = _final_state(db_path, session.call_id, scenario.customer_id)
     record = CallRecord(
         transcript=tuple(transcript),
         tool_log=tuple(session.tool_log),
@@ -119,6 +121,7 @@ async def run_scenario(client, scenario: Scenario, attempt: int, config: SimConf
         booked_slot=booked_slot,
         ended_by_agent=session.ended,
         birth_year=str(date.fromisoformat(CUSTOMERS[scenario.customer_id - 1][3]).year),
+        outcomes=outcomes,
     )
     checks = run_checks(scenario, record)
     return {

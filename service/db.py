@@ -35,6 +35,13 @@ CREATE TABLE IF NOT EXISTS calls (
     note            TEXT,
     started_at      TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS call_outcomes (
+    id         INTEGER PRIMARY KEY,
+    call_id    INTEGER NOT NULL REFERENCES calls(id),
+    outcome    TEXT NOT NULL,
+    note       TEXT,
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS bookings (
     customer_id INTEGER PRIMARY KEY REFERENCES customers(id),
     slot_id     INTEGER NOT NULL REFERENCES slots(id),
@@ -79,6 +86,12 @@ def init_db(db_path: str | Path) -> None:
                 "INSERT OR IGNORE INTO slots (id, district, day, start_time, end_time, capacity) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
                 SLOTS,
+            )
+            # Calls recorded before the outcome log existed get their single outcome logged once.
+            conn.execute(
+                "INSERT INTO call_outcomes (call_id, outcome, note, created_at) "
+                "SELECT id, outcome, note, started_at FROM calls "
+                "WHERE outcome IS NOT NULL AND id NOT IN (SELECT call_id FROM call_outcomes)"
             )
     finally:
         conn.close()
