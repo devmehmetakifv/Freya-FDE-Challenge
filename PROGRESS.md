@@ -36,6 +36,12 @@ Realistic edge cases only. Status: `handled+tested` / `left out (why)` / `open`.
 
 ## Decision log
 
+### 2026-11-17 18:22 — Agent sees the customer's existing booking
+- Live call: Ayşe already held Thursday 09-13, was offered only Friday, and the agent said it
+  couldn't see the earlier appointment (history had outcomes, not the booking itself).
+  `open_call` now returns `current_booking`; the prompt confirms it after verification and
+  moves it only if the customer asks. Panel scenario editor merged (18:20). 59 tests green.
+
 ### 2026-11-17 18:16 — Scenarios in a database (user's call)
 - Scenarios moved from `sim/scenarios.json` to SQLite: the simulator's own `data/sim.db`
   (`SIM_DB_PATH`), kept separate from the bank's `data/bank.db` so test data never mixes with
