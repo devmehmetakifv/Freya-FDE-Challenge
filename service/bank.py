@@ -16,6 +16,7 @@ AGENT_OUTCOMES = (
     "callback_requested",
     "declined",
     "needs_human",
+    "no_response",
 )
 
 

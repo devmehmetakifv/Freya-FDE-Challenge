@@ -28,8 +28,34 @@ Realistic edge cases only. Status: `handled+tested` / `left out (why)` / `open`.
 | Same slot booked twice (retry) | service | handled+tested | `test_booking_same_slot_twice_is_idempotent` |
 | Birth date / phone never sent to the LLM or panel | service | handled+tested | `test_open_call_returns_greeting_data_without_pii`, `test_customers_list_has_no_birth_dates` |
 | Agent claims "booked" without a booking | service | handled+tested | `test_unknown_outcome_and_booked_outcome_are_rejected` |
+| Customer silent → ask once, then `no_response` + hang up | bot | handled (idle timer 8s), voice-tested manually | `test_every_agent_outcome_is_accepted_by_service` (outcome only) |
+| Slot service down mid-call → agent told, no crash | agent | handled+tested | `test_service_down_is_reported_not_raised` |
+| Service refusal (not verified, bad date) reaches LLM as data | agent | handled+tested | `test_service_errors_become_error_dicts` |
+| Phone number never answered at all (no pickup) | dialer | left out: needs real telephony; dialer would record it without the LLM | — |
 
 ## Decision log
+
+### 2026-11-17 17:25 — Agent core + voice bot done (step 2/4)
+- `agent/`: Turkish system prompt + tool specs + `CallSession` executor, shared by bot and simulator.
+  The LLM never sees `call_id`, birth date or phone.
+- `bot/bot.py`: Pipecat 1.16 pipeline: SmallWebRTC → Silero VAD → ElevenLabs Realtime STT (tr) →
+  Claude (`AGENT_BRAIN_MODEL`) → ElevenLabs TTS `eleven_flash_v2_5` (tr). Outbound call simulated:
+  customer "picks up" with "Alo?", agent opens. `end_call` ends the worker after the goodbye.
+- **Rules added by us (in the prompt):** no proxy recipients; no address change by phone
+  (`needs_human`); no slot fits → `no_suitable_slot` + bank calls back with next plan; gender-neutral
+  address (full name, no Hanım/Bey unless the customer uses it). Bank name: "Nova Bank" (fictional).
+- 24 tests green, ruff clean. Service + bot smoke-started (ports 8000 / 7860).
+
+### 2026-11-17 17:20 — `no_response` outcome (user's idea)
+- **Decision (user):** Add `no_response` for a customer who doesn't respond.
+- Voice: silence produces no transcript, so Pipecat's `user_idle_timeout` (8s) injects a silence
+  marker; prompt says ask "Beni duyabiliyor musunuz?" once, then record `no_response` and hang up.
+
+### 2026-11-17 17:22 — ElevenLabs "audio effects" (phone filter + call-center noise): parked
+- Research: `audio_effects` exists on ElevenLabs HTTP TTS endpoints, **not** on the WebSocket
+  `multi-stream-input` that Pipecat's `ElevenLabsTTSService` uses. Alternative: Pipecat
+  `audio_out_filter` (custom band-pass, needs scipy) + `SoundfileMixer` (call-center loop file).
+- Parked as polish; revisit if time remains.
 
 ### 2026-11-17 17:15 — Slot service done (step 1/4)
 - FastAPI + SQLite (`service/`): call-scoped flow `open → verify → slots → book → outcome`, plus
