@@ -70,15 +70,7 @@ function CustomersTable({ customers }: { customers: Customer[] }) {
             <Td>{slotLabel(c.day, c.start_time, c.end_time)}</Td>
             <Td>
               {/* Show every outcome of the latest call so a needs_human is never hidden. */}
-              {c.last_outcomes.length === 0 ? (
-                <OutcomeBadge outcome={null} />
-              ) : (
-                <div className="flex flex-wrap gap-1">
-                  {c.last_outcomes.map((o, i) => (
-                    <OutcomeBadge key={i} outcome={o} />
-                  ))}
-                </div>
-              )}
+              <OutcomeBadges outcomes={c.last_outcomes ?? (c.last_outcome ? [c.last_outcome] : [])} />
             </Td>
           </tr>
         ))}
@@ -111,6 +103,24 @@ function SlotsTable({ slots }: { slots: Slot[] }) {
   );
 }
 
+// A row of outcome badges; an empty list renders the usual "—".
+function OutcomeBadges({ outcomes }: { outcomes: string[] }) {
+  if (outcomes.length === 0) return <OutcomeBadge outcome={null} />;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {outcomes.map((o, i) => (
+        <OutcomeBadge key={i} outcome={o} />
+      ))}
+    </div>
+  );
+}
+
+// Calls from a slot service without the outcome log still show their single outcome.
+function outcomesOf(call: Call): CallOutcome[] {
+  if (call.outcomes) return call.outcomes;
+  return call.outcome ? [{ outcome: call.outcome, note: call.note, created_at: call.started_at }] : [];
+}
+
 // A call's outcome log: one badge + note per recorded outcome, in the order they happened.
 function OutcomeLog({ outcomes }: { outcomes: CallOutcome[] }) {
   if (outcomes.length === 0) return <OutcomeBadge outcome={null} />;
@@ -140,7 +150,7 @@ function CallsTable({ calls }: { calls: Call[] }) {
               <Td>{k.verified ? "Yes" : "No"}</Td>
               <Td>{k.failed_attempts}</Td>
               <Td>
-                <OutcomeLog outcomes={k.outcomes} />
+                <OutcomeLog outcomes={outcomesOf(k)} />
               </Td>
               <Td>{k.started_at}</Td>
             </tr>
