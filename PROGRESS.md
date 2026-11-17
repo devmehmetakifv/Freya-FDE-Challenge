@@ -36,6 +36,13 @@ Realistic edge cases only. Status: `handled+tested` / `left out (why)` / `open`.
 
 ## Decision log
 
+### 2026-11-17 17:58 — Voice models: Scribe v3 Live + Eleven v4 Turbo (user's call)
+- STT `scribe_v3_live` (released 2026-11-10; same realtime WebSocket; ElevenLabs claims ~31% fewer
+  word errors vs v2 Realtime; no Turkish-specific or latency figure published).
+- TTS `eleven_v4_turbo` via `ElevenLabsDialogueTTSService`: Pipecat's standard
+  `ElevenLabsTTSService` (multi-stream-input WebSocket) rejects v3/v4 models at the handshake.
+- Keyterms (name biasing) not enabled: extra cost, Turkish characters unconfirmed.
+
 ### 2026-11-17 18:00 — Panel done (step 4/4); more fixes from the simulation
 - `freya-panel/` (Next.js, built by a sub-agent against the API contract, reviewed): tabs
   Customers / Call test (Pipecat JS client → bot `/start` with `customer_id`) / Simulation.
