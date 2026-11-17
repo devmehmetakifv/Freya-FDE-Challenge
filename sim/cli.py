@@ -23,8 +23,8 @@ def main() -> None:
     parser.add_argument("--scenarios", default="")
     args = parser.parse_args()
 
-    # Same editable scenario file the panel uses.
-    by_id = {s.id: s for s in ScenarioStore(Path(os.getenv("SIM_SCENARIOS_PATH", "sim/scenarios.json"))).list()}
+    # Same editable scenario table the panel uses.
+    by_id = {s.id: s for s in ScenarioStore(Path(os.getenv("SIM_DB_PATH", "data/sim.db"))).list()}
     scenarios = [by_id[i] for i in args.scenarios.split(",") if i] or list(by_id.values())
     config = SimConfig(agent_model=os.environ["AGENT_BRAIN_MODEL"], customer_model=os.environ["SIM_CUSTOMER_MODEL"])
     results = asyncio.run(run_batch(AsyncAnthropic(), scenarios, args.runs, config))

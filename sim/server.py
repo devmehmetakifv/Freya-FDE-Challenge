@@ -27,7 +27,7 @@ from sim.store import (
 load_dotenv()
 
 RESULTS_DIR = Path("sim/results")
-STORE = ScenarioStore(Path(os.getenv("SIM_SCENARIOS_PATH", "sim/scenarios.json")))
+STORE = ScenarioStore(Path(os.getenv("SIM_DB_PATH", "data/sim.db")))
 
 
 class RunRequest(BaseModel):

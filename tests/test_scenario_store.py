@@ -29,7 +29,7 @@ NEW = {
 
 @pytest.fixture
 def store(tmp_path):
-    return ScenarioStore(tmp_path / "scenarios.json")
+    return ScenarioStore(tmp_path / "sim.db")
 
 
 # A fresh store per test, swapped into the server module so the API uses it too.
@@ -42,9 +42,10 @@ def client(store, monkeypatch):
 # --- Store ---
 
 
-def test_missing_file_is_seeded_with_builtin_scenarios(store):
+def test_new_db_is_seeded_once_and_deletions_stick(store):
     assert [s.id for s in store.list()] == [s.id for s in SCENARIOS]
-    assert store.path.exists()
+    store.delete("happy_path")
+    assert "happy_path" not in [s.id for s in ScenarioStore(store.path).list()]
 
 
 def test_create_update_delete_persist_across_reloads(store):
@@ -53,6 +54,7 @@ def test_create_update_delete_persist_across_reloads(store):
     store.update("weekend_only", edited)
     reloaded = ScenarioStore(store.path)
     assert reloaded.get("weekend_only").title == "Sunday only"
+    assert [s.id for s in reloaded.list()][-1] == "weekend_only"  # appended at the end
     reloaded.delete("weekend_only")
     with pytest.raises(ScenarioNotFound):
         ScenarioStore(store.path).get("weekend_only")

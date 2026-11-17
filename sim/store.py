@@ -1,8 +1,9 @@
-"""Scenario store: scenarios live in a JSON file so they can be added, edited and deleted at runtime.
-The file is seeded from the built-in scenarios the first time it's missing."""
+"""Scenario store: scenarios live in the simulator's SQLite DB so they can be added, edited and
+deleted at runtime. The table is seeded from the built-in scenarios when it's first created."""
 
 import json
-import os
+import sqlite3
+from contextlib import closing
 from dataclasses import asdict
 from pathlib import Path
 from typing import Literal
@@ -10,6 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from service.bank import AGENT_OUTCOMES
+from service.db import connect, transaction
 from service.seed import CUSTOMERS, SLOTS
 from sim.scenarios import SCENARIOS, Scenario
 
@@ -68,48 +70,102 @@ def scenario_to_dict(scenario: Scenario) -> dict:
     }
 
 
+# Scenarios table in the simulator's own SQLite DB (separate from the bank's data/bank.db).
+# Scalars are columns; the three lists are JSON text. position keeps the display order.
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS scenarios (
+    id                TEXT PRIMARY KEY,
+    position          INTEGER NOT NULL,
+    title             TEXT NOT NULL,
+    description       TEXT NOT NULL,
+    customer_id       INTEGER NOT NULL,
+    situation         TEXT NOT NULL,
+    expected_outcomes TEXT NOT NULL,
+    allowed_slots     TEXT NOT NULL,
+    setup_bookings    TEXT NOT NULL,
+    is_cardholder     INTEGER NOT NULL
+)
+"""
+COLUMNS = (
+    "id", "title", "description", "customer_id", "situation",
+    "expected_outcomes", "allowed_slots", "setup_bookings", "is_cardholder",
+)
+
+
+def _to_row(scenario: Scenario) -> tuple:
+    d = scenario_to_dict(scenario)
+    return (
+        d["id"], d["title"], d["description"], d["customer_id"], d["situation"],
+        json.dumps(d["expected_outcomes"]), json.dumps(d["allowed_slots"]),
+        json.dumps(d["setup_bookings"]), int(d["is_cardholder"]),
+    )
+
+
+# Rows are validated on the way out too, so a hand-edited DB can't feed a broken scenario to a run.
+def _from_row(row: sqlite3.Row) -> Scenario:
+    data = {k: row[k] for k in COLUMNS}
+    for key in ("expected_outcomes", "allowed_slots", "setup_bookings"):
+        data[key] = json.loads(data[key])
+    data["is_cardholder"] = bool(data["is_cardholder"])
+    return ScenarioModel.model_validate(data).to_scenario()
+
+
 class ScenarioStore:
+    # Creating the table seeds it with the built-in scenarios once; deleting them later sticks.
     def __init__(self, path: Path):
         self.path = path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        conn = connect(path)
+        try:
+            with transaction(conn):
+                is_new = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'scenarios'"
+                ).fetchone() is None
+                conn.execute(SCHEMA)
+                if is_new:
+                    for position, scenario in enumerate(SCENARIOS):
+                        self._insert(conn, scenario, position)
+        finally:
+            conn.close()
 
     def list(self) -> list[Scenario]:
-        if not self.path.exists():
-            self._save(list(SCENARIOS))
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
-        return [ScenarioModel.model_validate(item).to_scenario() for item in raw]
+        with closing(connect(self.path)) as conn:
+            return [_from_row(r) for r in conn.execute("SELECT * FROM scenarios ORDER BY position")]
 
     def get(self, scenario_id: str) -> Scenario:
-        for s in self.list():
-            if s.id == scenario_id:
-                return s
-        raise ScenarioNotFound(scenario_id)
+        with closing(connect(self.path)) as conn:
+            row = conn.execute("SELECT * FROM scenarios WHERE id = ?", (scenario_id,)).fetchone()
+        if row is None:
+            raise ScenarioNotFound(scenario_id)
+        return _from_row(row)
 
     def create(self, scenario: Scenario) -> Scenario:
-        scenarios = self.list()
-        if any(s.id == scenario.id for s in scenarios):
-            raise ScenarioExists(scenario.id)
-        self._save([*scenarios, scenario])
+        with closing(connect(self.path)) as conn, transaction(conn):
+            position = conn.execute("SELECT COALESCE(MAX(position), -1) + 1 FROM scenarios").fetchone()[0]
+            try:
+                self._insert(conn, scenario, position)
+            except sqlite3.IntegrityError:
+                raise ScenarioExists(scenario.id) from None
         return scenario
 
     def update(self, scenario_id: str, scenario: Scenario) -> Scenario:
-        scenarios = self.list()
-        if not any(s.id == scenario_id for s in scenarios):
+        assignments = ", ".join(f"{c} = ?" for c in COLUMNS[1:])
+        with closing(connect(self.path)) as conn, transaction(conn):
+            changed = conn.execute(
+                f"UPDATE scenarios SET {assignments} WHERE id = ?", (*_to_row(scenario)[1:], scenario_id)
+            ).rowcount
+        if changed == 0:
             raise ScenarioNotFound(scenario_id)
-        self._save([scenario if s.id == scenario_id else s for s in scenarios])
         return scenario
 
     def delete(self, scenario_id: str) -> None:
-        scenarios = self.list()
-        remaining = [s for s in scenarios if s.id != scenario_id]
-        if len(remaining) == len(scenarios):
-            raise ScenarioNotFound(scenario_id)
-        self._save(remaining)
+        with closing(connect(self.path)) as conn, transaction(conn):
+            if conn.execute("DELETE FROM scenarios WHERE id = ?", (scenario_id,)).rowcount == 0:
+                raise ScenarioNotFound(scenario_id)
 
-    # Write to a temp file and swap it in, so a crash mid-write can't leave a half-written file.
-    def _save(self, scenarios: list[Scenario]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-            json.dump([scenario_to_dict(s) for s in scenarios], f, ensure_ascii=False, indent=2)
-            f.write("\n")
-        os.replace(tmp, self.path)
+    @staticmethod
+    def _insert(conn: sqlite3.Connection, scenario: Scenario, position: int) -> None:
+        conn.execute(
+            f"INSERT INTO scenarios (position, {', '.join(COLUMNS)}) VALUES (?, {', '.join('?' * len(COLUMNS))})",
+            (position, *_to_row(scenario)),
+        )
