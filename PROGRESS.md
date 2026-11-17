@@ -36,6 +36,14 @@ Realistic edge cases only. Status: `handled+tested` / `left out (why)` / `open`.
 
 ## Decision log
 
+### 2026-11-17 18:13 — Editable simulation scenarios (user's request)
+- Scenarios moved from code to `sim/scenarios.json` (seeded from the built-in set, versioned);
+  CRUD on the sim server (`/scenarios`, `/scenarios/{id}`, `/meta`) with pydantic validation
+  (real customer/slot ids, known outcomes, `booked` ⇔ allowed slots). Panel editor built by a
+  sub-agent in parallel.
+- 18:11 panel crash fixed: panel assumed new API fields while the service ran old code →
+  fields optional with fallback.
+
 ### 2026-11-17 18:09 — Outcome log per call (user's call: better UX)
 - Found in the panel: Mehmet's call showed `no_suitable_slot` while its note said the address
   change went to `needs_human`; one outcome column, last write wins.
