@@ -3,15 +3,63 @@
 Status and decision log for the Freya (YC S25) FDE challenge. Newest log entries on top.
 Entries carry a time (HH:MM, local) because the challenge asks us to note when the plan changes.
 
-## Current status
-- **Clock:** 2-hour development recording started 16:44 → hard stop **18:44**.
-- **Phase:** Build. Steps 1-3 done (service, voice bot, simulation). Step 4 (panel) in progress.
-- **Build order:** 1) slot service → 2) agent core + voice bot → 3) simulation → 4) panel.
+## Final summary (development stopped 18:30)
 
-## Open questions
-- Policy rules still to decide: what to offer when no slot fits (Kadıköy overflow), address-change
-  requests, callback handling.
-- Assistant language: Turkish (assumed).
+### What we built
+- **Slot service** (`service/`, FastAPI + SQLite `data/bank.db`): the bank's system. Call-scoped
+  flow `open → verify → slots → book → outcome`; birth-date check server-side (3 tries, then
+  locked); atomic booking (no overbooking under concurrency); per-call **outcome log**; call
+  history + current booking returned to the agent; birth date/phone never leave the service.
+- **Agent core** (`agent/`): one Turkish system prompt + tool specs + executor, shared by the
+  voice bot and the simulator, so the simulation tests the real brain.
+- **Voice bot** (`bot/`, Pipecat 1.16): browser WebRTC → Silero VAD → ElevenLabs **Scribe v3
+  Live** STT (tr) → **Claude Haiku 5.5** → ElevenLabs **Eleven v4 Turbo** TTS (tr). Outbound
+  call simulated (customer "picks up" with "Alo?"); silence detection → `no_response`.
+- **Simulation** (`sim/`): LLM-generated customer persona per run (mood nudge, LLM writes the
+  personality) vs the real agent on a throwaway DB; 7 deterministic checks (no LLM judge);
+  scenarios editable and stored in SQLite `data/sim.db`; FastAPI `:8100` + CLI.
+- **Panel** (`freya-panel/`, Next.js): Customers (bookings, slots, call outcome logs), Call test
+  (talk to the bot as any customer), Simulation (run, inspect checks/persona/transcript, edit
+  scenarios). Reads only through the FastAPI services.
+- **Tests:** 59 pytest tests (service, agent, simulation, scenario store; no API cost).
+
+### Rules we added (not in the brief)
+Identity = birth date, 3 tries per call; nothing about the call's subject or past calls before
+verification, even if the customer names it; no proxy recipients; no address change by phone
+(`needs_human`); no slot fits → `no_suitable_slot` + bank calls back; never point to another
+number/channel (no call center); one booking per customer, re-booking moves it; address the
+customer by full name (no gendered titles).
+
+### How we measured it
+Simulation pass rate (Haiku 5.5): **2/10 → 7/10 → 16/20 → 17/20** across prompt/service fixes.
+Every fix came from a failed check or a live-call transcript (leak before verification in 8/10
+calls, invented customer-service number, overwritten outcomes, missing call history/booking).
+Final run: all safety checks pass in all 20 runs; remaining misses are outcome labels.
+
+### Knowingly left out
+Real telephony (fake numbers; no-pickup handled by a dialer), Haiku vs Opus comparison (planned,
+no time), ElevenLabs audio effects (phone filter/noise: not on the WebSocket API), STT keyterms
+(extra cost, Turkish chars unverified), LLM-as-judge for tone, panel end-to-end tests.
+
+### Known issues at stop
+- **Goodbye lost on hang-up** (18:28, from bot logs): Claude returns the confirmation text and
+  `end_call` in one reply; the handler ends the pipeline before TTS speaks that text. Booking is
+  stored correctly, the customer just doesn't hear the confirmation. Fix: mark the call ending
+  and end the pipeline on the bot-stopped-speaking event.
+- Interruption during a tool call can cancel it in Pipecat after the service already acted
+  (DB and conversation can disagree); a write tool's result should always reach the LLM.
+
+### Before a real bank
+Real outbound telephony + no-answer retries; a way for customers to verify the caller (in-app
+"VARDAR Bank is calling you" notice); stronger identity check than birth date; Postgres instead
+of SQLite; human hand-off queue for `needs_human`; consent/recording notices (KVKK); call
+audio/transcript retention policy; monitoring of the simulation pass rate in CI.
+
+### Direction changes (times)
+16:48 own Pipecat pipeline instead of Freya platform · 16:58 added panel + simulation (over
+"no panel") · 17:07 Haiku 5.5 as brain · 17:20 `no_response` outcome · 17:55 call history for
+the agent · 17:58 Scribe v3 Live + Eleven v4 Turbo · 18:09 outcome log per call · 18:13/18:16
+editable scenarios, then in SQLite · 18:22 agent sees existing booking.
 
 ## Edge cases
 Realistic edge cases only. Status: `handled+tested` / `left out (why)` / `open`.
@@ -32,6 +80,10 @@ Realistic edge cases only. Status: `handled+tested` / `left out (why)` / `open`.
 | Slot service down mid-call → agent told, no crash | agent | handled+tested | `test_service_down_is_reported_not_raised` |
 | Service refusal (not verified, bad date) reaches LLM as data | agent | handled+tested | `test_service_errors_become_error_dicts` |
 | SQL injection via ids, birth date or note | service | handled+tested (typed inputs → 422; all SQL uses bound `?` params) | `test_sql_injection_payloads_are_rejected` |
+| Goodbye text + `end_call` in one reply → goodbye not spoken | bot | **open** (known issue, fix in summary) | — |
+| Customer interrupts during a tool call → Pipecat may cancel it after the service acted | bot | left out (time) | — |
+| Customer already booked → agent confirms existing booking | agent | handled+tested | `test_open_call_returns_current_booking`, `test_prompt_mentions_existing_booking` |
+| Several outcomes in one call (e.g. needs_human + no_suitable_slot) | service | handled+tested | `test_all_outcomes_of_a_call_are_logged_in_order` |
 | Phone number never answered at all (no pickup) | dialer | left out: needs real telephony; dialer would record it without the LLM | — |
 
 ## Decision log
