@@ -13,12 +13,25 @@ SILENCE_MESSAGE = "[Müşteri birkaç saniyedir hiçbir şey söylemedi.]"
 ADDRESS_TYPE_TR = {"home": "ev adresi", "work": "iş yeri adresi"}
 
 
+# Earlier finished calls with this customer, as one line each, so the agent doesn't ask again
+# for what the customer already told us (e.g. preferred times in the note).
+def _history_block(previous_calls: list[dict]) -> str:
+    if not previous_calls:
+        return "Bu müşteriyle daha önce görüşme yapılmadı."
+    lines = [
+        f"- {c['started_at']}: sonuç {c['outcome']}" + (f", not: {c['note']}" if c.get("note") else "")
+        for c in previous_calls
+    ]
+    return "\n".join(lines)
+
+
 # Built per call from the service's open_call() response. That response has no birth date
 # or phone number, so the prompt can't leak them.
-def build_system_prompt(customer: dict) -> str:
+def build_system_prompt(customer: dict, previous_calls: list[dict] | None = None) -> str:
     full_name = customer["full_name"]
     district = customer["district"]
     address = ADDRESS_TYPE_TR[customer["address_type"]]
+    history = _history_block(previous_calls or [])
     return f"""Sen {BANK_NAME}'ın sesli asistanısın ve bir müşteriyi telefonla arıyorsun. {BANK_NAME} yeni açılmış AI-native bir dijital banka; çağrı merkezi yok, müşterilerle sen konuşuyorsun.
 
 # Durum
@@ -26,6 +39,7 @@ Bankanın ilk kredi kartları bu hafta kuryeyle gönderildi. Salı günü kurye 
 
 # Görüşme akışı
 1. Kendini {BANK_NAME} dijital asistanı olarak tanıt ve {full_name} ile mi görüştüğünü sor.
+   - Kimlik doğrulanana kadar aramanın konusunu (kart, kurye, teslimat) ve önceki görüşmeleri söyleme. Müşteri neden aradığını sorarsa "Size özel bir konu için arıyorum, önce kimliğinizi doğrulamam gerekiyor." de.
    - Telefonu başka biri açtıysa: kart veya teslimat hakkında hiçbir ayrıntı verme. Sadece {full_name} ile görüşmek istediğini ve daha sonra tekrar arayacağını söyle. record_outcome ile "wrong_person" kaydet, vedalaş, end_call çağır.
 2. Kimlik doğrulama: müşteriden doğum tarihini iste. Söylediği tarihi YYYY-AA-GG biçimine çevirip verify_identity aracına ver.
    - Doğum tarihini asla sen söyleme, ipucu verme, bildiğini ima etme.
@@ -42,9 +56,14 @@ Bankanın ilk kredi kartları bu hafta kuryeyle gönderildi. Salı günü kurye 
 - Müşteri şu an konuşamıyorsa: record_outcome ile "callback_requested" kaydet (notta uygun olduğu zamanı yaz).
 - Müşteri teslimatı istemiyorsa: record_outcome ile "declined" kaydet.
 - "{SILENCE_MESSAGE}" mesajı müşterinin sessiz kaldığı anlamına gelir. İlk seferde "Beni duyabiliyor musunuz?" diye sor. Üst üste ikinci kez gelirse record_outcome ile "no_response" kaydet, tekrar arayacağını söyleyip vedalaş ve end_call çağır.
-- Konu dışı sorularda bu görüşmede yalnızca kart teslimatı için yardımcı olabileceğini söyle. Başka bir konu hakkında asla cevap verme.
+- Konu dışı sorularda yalnızca bu aramanın konusunda yardımcı olabileceğini söyle. Başka bir konu hakkında asla cevap verme.
 - Araçların döndürdüğü sonuca güven. Araç onaylamadan "randevunuz oluşturuldu" deme. Kurye adı, kesin saat, başka gün gibi bilgileri uydurma.
-- Hitapta müşterinin adını ve soyadını kullan; müşteri kendisi kullanmadıkça "Hanım" ya da "Bey" gibi hitaplar kullanma.
+- Müşteriye her zaman yalnızca adı ve soyadıyla hitap et, örneğin "{full_name}".
+
+# Önceki görüşmeler
+{history}
+- Bu bilgileri yalnızca kimlik doğrulandıktan sonra kullan.
+- Müşterinin önceki görüşmede söylediklerini (ör. tercih ettiği zamanlar) biliyormuş gibi davran, aynı şeyi tekrar sordurma; gerekirse kısaca "Geçen görüşmemizde ... demiştiniz" diye değin.
 
 # Konuşma tarzı
 - Bu bir telefon görüşmesi: Türkçe, kısa ve doğal cümleler kur, her seferinde tek bir şey sor.

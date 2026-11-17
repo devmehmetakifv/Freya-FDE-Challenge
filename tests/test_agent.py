@@ -80,3 +80,18 @@ def test_prompt_has_customer_context_and_no_pii():
     assert "Ayşe Kaya" in prompt and "Kadıköy" in prompt and "ev adresi" in prompt
     assert "VARDAR Bank" in prompt
     assert "1988" not in prompt and "0532" not in prompt
+    assert "daha önce görüşme yapılmadı" in prompt
+
+
+def test_prompt_includes_previous_call_notes():
+    customer = {"full_name": "Ayşe Kaya", "district": "Kadıköy", "address_type": "home"}
+    previous = [{"started_at": "2026-11-17T14:42:00+00:00", "outcome": "no_suitable_slot", "note": "Pazar gece 23:30"}]
+    prompt = build_system_prompt(customer, previous)
+    assert "no_suitable_slot" in prompt and "Pazar gece 23:30" in prompt
+
+
+async def test_session_carries_previous_calls(http):
+    first = await CallSession.open(http, AYSE)
+    await first.execute("record_outcome", {"outcome": "callback_requested", "note": "akşam ara"})
+    second = await CallSession.open(http, AYSE)
+    assert second.previous_calls[0]["note"] == "akşam ara"

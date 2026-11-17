@@ -83,6 +83,7 @@ class CallSession:
     http: httpx.AsyncClient
     call_id: int
     customer: dict
+    previous_calls: list[dict] = field(default_factory=list)
     ended: bool = False
     tool_log: list[dict] = field(default_factory=list)
 
@@ -92,7 +93,7 @@ class CallSession:
         resp = await http.post("/calls", json={"customer_id": customer_id})
         resp.raise_for_status()
         body = resp.json()
-        return cls(http=http, call_id=body["call_id"], customer=body["customer"])
+        return cls(http=http, call_id=body["call_id"], customer=body["customer"], previous_calls=body.get("previous_calls", []))
 
     async def execute(self, name: str, args: dict) -> dict:
         result = await self._dispatch(name, args)

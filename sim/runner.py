@@ -92,7 +92,7 @@ async def run_scenario(client, scenario: Scenario, attempt: int, config: SimConf
         await _apply_setup(http, scenario)
         session = await CallSession.open(http, scenario.customer_id)
         persona = await generate_persona(client, config.customer_model, scenario)
-        agent_system = build_system_prompt(session.customer)
+        agent_system = build_system_prompt(session.customer, session.previous_calls)
         customer_system = customer_system_prompt(scenario, persona)
 
         transcript = [{"role": "customer", "text": KICKOFF_MESSAGE}]

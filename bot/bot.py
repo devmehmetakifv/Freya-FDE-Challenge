@@ -90,7 +90,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
             api_key=os.environ["ANTHROPIC_API_KEY"],
             settings=AnthropicLLMService.Settings(
                 model=os.environ["AGENT_BRAIN_MODEL"],
-                system_instruction=build_system_prompt(session.customer),
+                system_instruction=build_system_prompt(session.customer, session.previous_calls),
             ),
         )
         tts = ElevenLabsTTSService(

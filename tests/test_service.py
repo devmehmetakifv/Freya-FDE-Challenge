@@ -185,6 +185,28 @@ def test_unknown_outcome_and_booked_outcome_are_rejected(client):
     assert resp.status_code == 409
 
 
+def test_locked_call_outcome_is_final(client):
+    call_id = client.post("/calls", json={"customer_id": AYSE}).json()["call_id"]
+    for _ in range(3):
+        client.post(f"/calls/{call_id}/verify", json={"birth_date": "1990-01-01"})
+    resp = client.post(f"/calls/{call_id}/outcome", json={"outcome": "no_suitable_slot"})
+    assert resp.status_code == 403
+    assert client.get("/calls").json()[0]["outcome"] == "verification_failed"
+
+
+# --- Call history: the next call sees what earlier calls recorded ---
+
+
+def test_open_call_returns_previous_finished_calls(client):
+    assert client.post("/calls", json={"customer_id": AYSE}).json()["previous_calls"] == []
+    first = client.post("/calls", json={"customer_id": AYSE}).json()["call_id"]
+    client.post(f"/calls/{first}/outcome", json={"outcome": "no_suitable_slot", "note": "Pazar gece 23:30 uygun"})
+    history = client.post("/calls", json={"customer_id": AYSE}).json()["previous_calls"]
+    # Only finished calls count; the unfinished first call and the new call are excluded.
+    assert [(c["outcome"], c["note"]) for c in history] == [("no_suitable_slot", "Pazar gece 23:30 uygun")]
+    assert client.post("/calls", json={"customer_id": MEHMET}).json()["previous_calls"] == []
+
+
 # --- Injection attempts: typed inputs reject them at the edge, bound parameters make them inert ---
 
 

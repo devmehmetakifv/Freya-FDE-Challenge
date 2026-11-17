@@ -97,11 +97,18 @@ def open_call(conn: sqlite3.Connection, customer_id: int) -> dict:
     customer = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
     if customer is None:
         raise NotFound(f"customer {customer_id} not found")
+    # Last finished calls with this customer, so the agent knows what was already said.
+    previous = conn.execute(
+        "SELECT started_at, outcome, note FROM calls WHERE customer_id = ? AND outcome IS NOT NULL "
+        "ORDER BY id DESC LIMIT 3",
+        (customer_id,),
+    ).fetchall()
     cursor = conn.execute(
         "INSERT INTO calls (customer_id, started_at) VALUES (?, ?)", (customer_id, _now())
     )
     return {
         "call_id": cursor.lastrowid,
+        "previous_calls": [dict(row) for row in previous],
         "customer": {
             "full_name": customer["full_name"],
             "district": customer["district"],
@@ -196,6 +203,8 @@ def record_outcome(conn: sqlite3.Connection, call_id: int, outcome: str, note: s
         call = _get_call(conn, call_id)
         if call["outcome"] == "booked":
             raise AlreadyBooked("call already ended with a booking")
+        if call["failed_attempts"] >= MAX_VERIFY_ATTEMPTS:
+            raise VerificationLocked("call is locked after failed verification; outcome is final")
         conn.execute(
             "UPDATE calls SET outcome = ?, note = ? WHERE id = ?", (outcome, note, call_id)
         )
