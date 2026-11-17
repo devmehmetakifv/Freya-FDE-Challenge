@@ -5,7 +5,7 @@ Entries carry a time (HH:MM, local) because the challenge asks us to note when t
 
 ## Current status
 - **Clock:** 2-hour development recording started 16:44 → hard stop **18:44**.
-- **Phase:** Build. Step 1/4 (slot service) done. Next: agent core + voice bot.
+- **Phase:** Build. Steps 1-3 done (service, voice bot, simulation). Step 4 (panel) in progress.
 - **Build order:** 1) slot service → 2) agent core + voice bot → 3) simulation → 4) panel.
 
 ## Open questions
@@ -35,6 +35,28 @@ Realistic edge cases only. Status: `handled+tested` / `left out (why)` / `open`.
 | Phone number never answered at all (no pickup) | dialer | left out: needs real telephony; dialer would record it without the LLM | — |
 
 ## Decision log
+
+### 2026-11-17 17:55 — Call history for the agent + fixes from the simulation (direction change)
+- **Decision (user, after a live call):** the agent must see past calls with the same customer.
+  The agent had said "Bu konuşmayı göremiyorum" and made the customer repeat themselves.
+  → `open_call` returns the last 3 finished calls (date, outcome, note); the prompt uses them
+  **only after verification** (otherwise the history itself leaks to whoever answers).
+- Fixes driven by the baseline simulation: no call purpose before verification; positive
+  phrasing for addressing customers (the "Hanım/Bey" example leaked into speech); a call locked
+  after 3 failed birth dates keeps `verification_failed` (the agent was overwriting it).
+- Housekeeping: LF line endings enforced via `.gitattributes` (a patch script had written CRLF).
+- **After fixes: 7/10** (was 2/10). Remaining 3 failures: suspicious personas raise "kart"
+  themselves and the agent echoes the word before verification; one persona refused to verify
+  (`declined`); the agent once pointed a suspicious customer to a "VARDAR Bank customer service
+  number" that doesn't exist (bank has no call center) → hallucinated channel.
+
+### 2026-11-17 17:47 — Simulation module done (step 3/4): baseline 2/10
+- `sim/`: 10 scenarios (fixed facts + expected end state), **LLM-generated persona per run**
+  (random age/mood nudge, the LLM writes the personality), runner plays the real agent against the
+  simulated customer on a throwaway DB, 7 deterministic checks, FastAPI `:8100` + CLI.
+- **Baseline (claude-haiku-5-5, 1 run each): 2/10.** Main failure: the agent stated the card/
+  delivery purpose before verification in 8/10 calls (same as the live call at 17:32).
+- Panel being built in parallel by a sub-agent against the sim/service API contract.
 
 ### 2026-11-17 17:25 — Agent core + voice bot done (step 2/4)
 - `agent/`: Turkish system prompt + tool specs + `CallSession` executor, shared by bot and simulator.
