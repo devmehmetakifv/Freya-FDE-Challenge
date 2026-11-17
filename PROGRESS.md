@@ -36,6 +36,11 @@ Realistic edge cases only. Status: `handled+tested` / `left out (why)` / `open`.
 
 ## Decision log
 
+### 2026-11-17 18:16 — Scenarios in a database (user's call)
+- Scenarios moved from `sim/scenarios.json` to SQLite: the simulator's own `data/sim.db`
+  (`SIM_DB_PATH`), kept separate from the bank's `data/bank.db` so test data never mixes with
+  the bank's system. Seeded once from the built-ins; same store interface, API unchanged.
+
 ### 2026-11-17 18:13 — Editable simulation scenarios (user's request)
 - Scenarios moved from code to `sim/scenarios.json` (seeded from the built-in set, versioned);
   CRUD on the sim server (`/scenarios`, `/scenarios/{id}`, `/meta`) with pydantic validation
