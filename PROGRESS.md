@@ -36,6 +36,13 @@ Realistic edge cases only. Status: `handled+tested` / `left out (why)` / `open`.
 
 ## Decision log
 
+### 2026-11-17 18:09 — Outcome log per call (user's call: better UX)
+- Found in the panel: Mehmet's call showed `no_suitable_slot` while its note said the address
+  change went to `needs_human`; one outcome column, last write wins.
+- Chosen over a "sticky needs_human" patch: `call_outcomes` table; booking, lock and
+  `record_outcome` all append; panel shows every outcome + note; simulation's expected-outcome
+  check accepts the expected outcome anywhere in the log.
+
 ### 2026-11-17 18:02 — Simulation after no-leak/no-redirect fixes: 17/20
 - 2 runs × 10 scenarios, claude-haiku-5-5. All safety checks pass in every run (no leak before
   verification, no birth-date leak, no false booking claim). Remaining misses are outcome labels:
