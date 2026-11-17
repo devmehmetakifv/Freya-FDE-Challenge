@@ -31,6 +31,7 @@ Realistic edge cases only. Status: `handled+tested` / `left out (why)` / `open`.
 | Customer silent → ask once, then `no_response` + hang up | bot | handled (idle timer 8s), voice-tested manually | `test_every_agent_outcome_is_accepted_by_service` (outcome only) |
 | Slot service down mid-call → agent told, no crash | agent | handled+tested | `test_service_down_is_reported_not_raised` |
 | Service refusal (not verified, bad date) reaches LLM as data | agent | handled+tested | `test_service_errors_become_error_dicts` |
+| SQL injection via ids, birth date or note | service | handled+tested (typed inputs → 422; all SQL uses bound `?` params) | `test_sql_injection_payloads_are_rejected` |
 | Phone number never answered at all (no pickup) | dialer | left out: needs real telephony; dialer would record it without the LLM | — |
 
 ## Decision log

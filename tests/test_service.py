@@ -185,6 +185,22 @@ def test_unknown_outcome_and_booked_outcome_are_rejected(client):
     assert resp.status_code == 409
 
 
+# --- Injection attempts: typed inputs reject them at the edge, bound parameters make them inert ---
+
+
+def test_sql_injection_payloads_are_rejected(client):
+    call_id = client.post("/calls", json={"customer_id": AYSE}).json()["call_id"]
+    assert client.post("/calls", json={"customer_id": "1 OR 1=1"}).status_code == 422
+    assert client.post(f"/calls/{call_id}/book", json={"slot_id": "1; DROP TABLE slots"}).status_code == 422
+    assert client.post(f"/calls/{call_id}/verify", json={"birth_date": "' OR '1'='1"}).status_code == 422
+    assert client.get("/calls/1 OR 1=1/slots").status_code == 422
+    # A free-text field reaches SQL only as a bound value: stored verbatim, tables intact.
+    note = "x'); DROP TABLE customers; --"
+    client.post(f"/calls/{call_id}/outcome", json={"outcome": "declined", "note": note})
+    assert client.get("/calls").json()[0]["note"] == note
+    assert len(client.get("/customers").json()) == 8
+
+
 # --- Panel reads ---
 
 
