@@ -36,6 +36,13 @@ Realistic edge cases only. Status: `handled+tested` / `left out (why)` / `open`.
 
 ## Decision log
 
+### 2026-11-17 18:02 — Simulation after no-leak/no-redirect fixes: 17/20
+- 2 runs × 10 scenarios, claude-haiku-5-5. All safety checks pass in every run (no leak before
+  verification, no birth-date leak, no false booking claim). Remaining misses are outcome labels:
+  `social_engineering` 0/2 (agent labels the impostor `wrong_person`), `failed_verification` 1/2
+  (customer asked for a callback after 2 wrong dates → `callback_requested`).
+- Trend: 2/10 → 7/10 → 16/20 → 17/20.
+
 ### 2026-11-17 17:58 — Voice models: Scribe v3 Live + Eleven v4 Turbo (user's call)
 - STT `scribe_v3_live` (released 2026-11-10; same realtime WebSocket; ElevenLabs claims ~31% fewer
   word errors vs v2 Realtime; no Turkish-specific or latency figure published).
