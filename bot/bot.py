@@ -9,7 +9,7 @@ import os
 import httpx
 from dotenv import load_dotenv
 from loguru import logger
-from pipecat.adapters.schemas.function_schema import FunctionSchema
+from pipecat.adapters.llm.schemas.function_schema import FunctionSchema
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import (
     EndWorkerFrame,
@@ -27,8 +27,8 @@ from pipecat.processors.frame_processor import FrameDirection
 from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.anthropic.llm import AnthropicLLMService
+from pipecat.services.elevenlabs.dialogue.tts import ElevenLabsDialogueTTSService
 from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
-from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.transcriptions.language import Language
 from pipecat.transports.base_transport import BaseTransport, TransportParams
@@ -82,9 +82,10 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         logger.info(f"call {session.call_id} opened for customer {customer_id}")
 
         # Turkish in, Turkish out. Claude model comes from env so Haiku vs Opus is a one-line swap.
+        # Scribe v3 Live: same realtime WebSocket as v2, ~31% fewer word errors (ElevenLabs' figure).
         stt = ElevenLabsRealtimeSTTService(
             api_key=os.environ["ELEVENLABS_API_KEY"],
-            settings=ElevenLabsRealtimeSTTService.Settings(language=Language.TR),
+            settings=ElevenLabsRealtimeSTTService.Settings(model="scribe_v3_live", language=Language.TR),
         )
         llm = AnthropicLLMService(
             api_key=os.environ["ANTHROPIC_API_KEY"],
@@ -93,11 +94,13 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
                 system_instruction=build_system_prompt(session.customer, session.previous_calls),
             ),
         )
-        tts = ElevenLabsTTSService(
+        # Eleven v4 Turbo is only served by the Text-to-Dialogue WebSocket; Pipecat's plain
+        # ElevenLabsTTSService endpoint rejects v3/v4 models at the handshake.
+        tts = ElevenLabsDialogueTTSService(
             api_key=os.environ["ELEVENLABS_API_KEY"],
-            settings=ElevenLabsTTSService.Settings(
+            settings=ElevenLabsDialogueTTSService.Settings(
                 voice=os.environ["ELEVENLABS_VOICE_ID"],
-                model="eleven_flash_v2_5",
+                model="eleven_v4_turbo",
                 language=Language.TR,
             ),
         )
