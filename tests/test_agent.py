@@ -83,6 +83,13 @@ def test_prompt_has_customer_context_and_no_pii():
     assert "daha önce görüşme yapılmadı" in prompt
 
 
+def test_prompt_mentions_existing_booking():
+    customer = {"full_name": "Ayşe Kaya", "district": "Kadıköy", "address_type": "home"}
+    booking = {"slot_id": 1, "day": "Perşembe", "start_time": "09:00", "end_time": "13:00"}
+    assert "Perşembe 09:00-13:00" in build_system_prompt(customer, [], booking)
+    assert "randevusu yok" in build_system_prompt(customer, [], None)
+
+
 def test_prompt_includes_previous_call_notes():
     customer = {"full_name": "Ayşe Kaya", "district": "Kadıköy", "address_type": "home"}
     previous = [{"started_at": "2026-11-17T14:42:00+00:00", "outcome": "no_suitable_slot", "note": "Pazar gece 23:30"}]

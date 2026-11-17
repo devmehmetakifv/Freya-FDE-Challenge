@@ -91,7 +91,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
             api_key=os.environ["ANTHROPIC_API_KEY"],
             settings=AnthropicLLMService.Settings(
                 model=os.environ["AGENT_BRAIN_MODEL"],
-                system_instruction=build_system_prompt(session.customer, session.previous_calls),
+                system_instruction=build_system_prompt(session.customer, session.previous_calls, session.current_booking),
             ),
         )
         # Eleven v4 Turbo is only served by the Text-to-Dialogue WebSocket; Pipecat's plain

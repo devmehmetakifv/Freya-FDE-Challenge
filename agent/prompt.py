@@ -27,11 +27,18 @@ def _history_block(previous_calls: list[dict]) -> str:
 
 # Built per call from the service's open_call() response. That response has no birth date
 # or phone number, so the prompt can't leak them.
-def build_system_prompt(customer: dict, previous_calls: list[dict] | None = None) -> str:
+def build_system_prompt(customer: dict, previous_calls: list[dict] | None = None, current_booking: dict | None = None) -> str:
     full_name = customer["full_name"]
     district = customer["district"]
     address = ADDRESS_TYPE_TR[customer["address_type"]]
     history = _history_block(previous_calls or [])
+    if current_booking:
+        b = current_booking
+        booking = (f"Müşterinin zaten bir randevusu var: {b['day']} {b['start_time']}-{b['end_time']} (slot_id {b['slot_id']}). "
+                   "Doğrulamadan sonra yeni zaman sunmak yerine bu randevuyu hatırlat ve hâlâ uygun olup olmadığını sor. "
+                   "Değiştirmek isterse get_available_slots ve book_slot ile taşı (eski yer otomatik boşalır).")
+    else:
+        booking = "Müşterinin şu an bir randevusu yok."
     return f"""Sen {BANK_NAME}'ın sesli asistanısın ve bir müşteriyi telefonla arıyorsun. {BANK_NAME} yeni açılmış AI-native bir dijital banka; çağrı merkezi yok, müşterilerle sen konuşuyorsun.
 
 # Durum
@@ -61,6 +68,9 @@ Bankanın ilk kredi kartları bu hafta kuryeyle gönderildi. Salı günü kurye 
 - Müşteriyi asla başka bir telefon numarasına, web sitesine, şubeye ya da kanala yönlendirme; bankanın çağrı merkezi yok. Gerekirse banka müşteriye kendisi ulaşır.
 - Araçların döndürdüğü sonuca güven. Araç onaylamadan "randevunuz oluşturuldu" deme. Kurye adı, kesin saat, başka gün gibi bilgileri uydurma.
 - Müşteriye her zaman yalnızca adı ve soyadıyla hitap et, örneğin "{full_name}".
+
+# Mevcut randevu
+{booking}
 
 # Önceki görüşmeler
 {history}

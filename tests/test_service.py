@@ -225,6 +225,13 @@ def test_booking_and_lock_are_logged_too(client):
 # --- Call history: the next call sees what earlier calls recorded ---
 
 
+def test_open_call_returns_current_booking(client):
+    assert client.post("/calls", json={"customer_id": AYSE}).json()["current_booking"] is None
+    client.post(f"/calls/{verified_call(client, AYSE, AYSE_DOB)}/book", json={"slot_id": KADIKOY_THU})
+    booking = client.post("/calls", json={"customer_id": AYSE}).json()["current_booking"]
+    assert (booking["slot_id"], booking["day"], booking["start_time"]) == (KADIKOY_THU, "Perşembe", "09:00")
+
+
 def test_open_call_returns_previous_finished_calls(client):
     assert client.post("/calls", json={"customer_id": AYSE}).json()["previous_calls"] == []
     first = client.post("/calls", json={"customer_id": AYSE}).json()["call_id"]

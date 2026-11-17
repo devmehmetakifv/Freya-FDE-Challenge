@@ -121,12 +121,18 @@ def open_call(conn: sqlite3.Connection, customer_id: int) -> dict:
         "ORDER BY id DESC LIMIT 3",
         (customer_id,),
     ).fetchall()
+    # The customer's current booking, if a previous call already made one.
+    booking = conn.execute(
+        "SELECT s.* FROM bookings b JOIN slots s ON s.id = b.slot_id WHERE b.customer_id = ?",
+        (customer_id,),
+    ).fetchone()
     cursor = conn.execute(
         "INSERT INTO calls (customer_id, started_at) VALUES (?, ?)", (customer_id, _now())
     )
     return {
         "call_id": cursor.lastrowid,
         "previous_calls": [dict(row) for row in previous],
+        "current_booking": _slot_view(booking) if booking else None,
         "customer": {
             "full_name": customer["full_name"],
             "district": customer["district"],
