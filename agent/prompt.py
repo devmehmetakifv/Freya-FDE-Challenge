@@ -1,6 +1,6 @@
 """The agent's system prompt. Shared by the voice bot and the simulator so both test the same brain."""
 
-BANK_NAME = "Nova Bank"
+BANK_NAME = "VARDAR Bank"
 
 # The customer picks up and says "Alo?". Used as the first user turn in both the voice bot
 # and the simulator, so the agent always opens the call the same way.

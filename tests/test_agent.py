@@ -78,4 +78,5 @@ def test_anthropic_tool_shape_matches_specs():
 def test_prompt_has_customer_context_and_no_pii():
     prompt = build_system_prompt({"full_name": "Ayşe Kaya", "district": "Kadıköy", "address_type": "home"})
     assert "Ayşe Kaya" in prompt and "Kadıköy" in prompt and "ev adresi" in prompt
+    assert "VARDAR Bank" in prompt
     assert "1988" not in prompt and "0532" not in prompt

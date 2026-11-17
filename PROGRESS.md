@@ -44,7 +44,7 @@ Realistic edge cases only. Status: `handled+tested` / `left out (why)` / `open`.
   customer "picks up" with "Alo?", agent opens. `end_call` ends the worker after the goodbye.
 - **Rules added by us (in the prompt):** no proxy recipients; no address change by phone
   (`needs_human`); no slot fits → `no_suitable_slot` + bank calls back with next plan; gender-neutral
-  address (full name, no Hanım/Bey unless the customer uses it). Bank name: "Nova Bank" (fictional).
+  address (full name, no Hanım/Bey unless the customer uses it). Bank name: "VARDAR Bank" (user's choice at 17:25, was "Nova Bank").
 - 24 tests green, ruff clean. Service + bot smoke-started (ports 8000 / 7860).
 
 ### 2026-11-17 17:20 — `no_response` outcome (user's idea)
